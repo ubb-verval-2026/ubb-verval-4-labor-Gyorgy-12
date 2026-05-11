@@ -1,4 +1,3 @@
-using System;
 using System.Diagnostics;
 using System.Reflection;
 using System.Text;
@@ -13,10 +12,11 @@ namespace DatesAndStuff.Web.Tests;
 [TestFixture]
 public class PersonPageTests
 {
+    private const double BaseSalary = 5000;
+    private const string ValidationErrorMessage = "The specified percentag should be between -10 and infinity.";
     private IWebDriver driver;
     private StringBuilder verificationErrors;
     private const string BaseURL = "http://localhost:5091";
-    private bool acceptNextAlert = true;
 
     private Process? _blazorProcess;
 
@@ -58,7 +58,7 @@ public class PersonPageTests
                     break;
                 }
             }
-            catch (Exception e)
+            catch (Exception)
             {
                 Thread.Sleep(1000);
             }
@@ -97,7 +97,7 @@ public class PersonPageTests
         Assert.That(verificationErrors.ToString(), Is.EqualTo(""));
     }
 
-     [TestCase(0, 5000)]
+    [TestCase(0, 5000)]
     [TestCase(5, 5250)]
     [TestCase(10, 5500)]
     [TestCase(20, 6000)]
@@ -117,57 +117,41 @@ public class PersonPageTests
         var submitButton = wait.Until(ExpectedConditions.ElementExists(By.XPath("//*[@data-test='SalaryIncreaseSubmitButton']")));
         submitButton.Click();
 
-
         // Assert
         var salaryLabel = wait.Until(ExpectedConditions.ElementExists(By.XPath("//*[@data-test='DisplayedSalary']")));
         var salaryAfterSubmission = double.Parse(salaryLabel.Text);
         salaryAfterSubmission.Should().BeApproximately(expectedSalary, 0.001);
     }
-    private bool IsElementPresent(By by)
-    {
-        try
-        {
-            driver.FindElement(by);
-            return true;
-        }
-        catch (NoSuchElementException)
-        {
-            return false;
-        }
-    }
 
-    private bool IsAlertPresent()
+    [TestCase(-11)]
+    [TestCase(-25)]
+    public void Person_SalaryIncrease_BelowMinusTen_ShouldShowValidationErrors(double percentage)
     {
-        try
-        {
-            driver.SwitchTo().Alert();
-            return true;
-        }
-        catch (NoAlertPresentException)
-        {
-            return false;
-        }
-    }
+        // Arrange
+        driver.Navigate().GoToUrl(BaseURL);
+        driver.FindElement(By.XPath("//*[@data-test='PersonPageNavigation']")).Click();
 
-    private string CloseAlertAndGetItsText()
-    {
-        try
-        {
-            IAlert alert = driver.SwitchTo().Alert();
-            string alertText = alert.Text;
-            if (acceptNextAlert)
-            {
-                alert.Accept();
-            }
-            else
-            {
-                alert.Dismiss();
-            }
-            return alertText;
-        }
-        finally
-        {
-            acceptNextAlert = true;
-        }
+        var wait = new WebDriverWait(driver, TimeSpan.FromSeconds(5));
+
+        var input = wait.Until(ExpectedConditions.ElementExists(By.XPath("//*[@data-test='SalaryIncreasePercentageInput']")));
+        input.Clear();
+        input.SendKeys(percentage.ToString(System.Globalization.CultureInfo.InvariantCulture));
+
+        // Act
+        var submitButton = wait.Until(ExpectedConditions.ElementExists(By.XPath("//*[@data-test='SalaryIncreaseSubmitButton']")));
+        submitButton.Click();
+
+        // Assert
+        wait.Until(_ => driver.FindElements(By.XPath($"//*[normalize-space(text())='{ValidationErrorMessage}']")).Count == 2);
+
+        var fieldValidationMessage = wait.Until(ExpectedConditions.ElementExists(By.CssSelector(".validation-message")));
+        fieldValidationMessage.Text.Should().Be(ValidationErrorMessage);
+
+        var validationMessages = driver.FindElements(By.XPath($"//*[normalize-space(text())='{ValidationErrorMessage}']"));
+        validationMessages.Should().HaveCount(2);
+
+        var salaryLabel = wait.Until(ExpectedConditions.ElementExists(By.XPath("//*[@data-test='DisplayedSalary']")));
+        var salaryAfterSubmission = double.Parse(salaryLabel.Text);
+        salaryAfterSubmission.Should().BeApproximately(BaseSalary, 0.001);
     }
 }
