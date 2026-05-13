@@ -33,19 +33,28 @@ public class PersonPageTests
         var startInfo = new ProcessStartInfo
         {
             FileName = "dotnet",
-            //Arguments = $"run --project \"{webProjectPath}\"",
-            Arguments = "dotnet run --no-build",
+            Arguments = $"run --project \"{webProjectPath}\" --urls http://localhost:5091",
             WorkingDirectory = webProjFolderPath,
             RedirectStandardOutput = true,
             RedirectStandardError = true,
-            UseShellExecute = false
+            UseShellExecute = false,
+            CreateNoWindow = true
         };
 
         _blazorProcess = Process.Start(startInfo);
 
+        if (_blazorProcess != null)
+        {
+            // asynchronously read output and error for diagnostics
+            _blazorProcess.OutputDataReceived += (s, e) => { if (e.Data != null) Console.WriteLine($"[Blazor stdout] {e.Data}"); };
+            _blazorProcess.ErrorDataReceived += (s, e) => { if (e.Data != null) Console.WriteLine($"[Blazor stderr] {e.Data}"); };
+            _blazorProcess.BeginOutputReadLine();
+            _blazorProcess.BeginErrorReadLine();
+        }
+
         // Wait for the app to become available
         var client = new HttpClient();
-        var timeout = TimeSpan.FromSeconds(30);
+        var timeout = TimeSpan.FromSeconds(60);
         var start = DateTime.Now;
 
         while (DateTime.Now - start < timeout)
@@ -58,8 +67,9 @@ public class PersonPageTests
                     break;
                 }
             }
-            catch (Exception)
+            catch (Exception ex)
             {
+                Console.WriteLine($"Waiting for Blazor app: {ex.Message}");
                 Thread.Sleep(1000);
             }
         }
